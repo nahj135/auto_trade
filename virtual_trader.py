@@ -9,6 +9,7 @@ class VirtualAutoTrader:
         self.balance = start_balance
         self.strategy = strategy
         self.positions = {}
+        self.trade_history = {}
         self.transaction_fee = 0.0005 
         self.total_num_buy = 0 
         self.total_num_sell = 0 
@@ -25,15 +26,27 @@ class VirtualAutoTrader:
     def get_balance(self):
         return self.balance
 
+    def add_history(self, action, price, amount):
+        eval = self.get_eval_balance(self.ticker, price)
+        self.trade_history.append({'action:':action, 'ticker':self.ticker, 'price':price,'amount':amount,'eval':eval})
+
     def buy(self, ticker, price):
-        krw = self.get_balance()
-        if krw <= 1000:
+        budget = self.balance
+
+        if budget <= 1000:
             return 
+
+        quantity = (budget / price) * (1 - self.transaction_fee) # 거래수수료 제외 
         
-        quantity = (self.balance / price) * (1 - self.transaction_fee) # 거래수수료 제외 
-        self.balance -= quantity * price # 잔고 변화 
-        self.positions[ticker] = quantity
-        print(f'Bought {quantity} {ticker} at {price} KRW. Current balance: {self.balance} KRW')
+        self.balance -= budget # 잔고 변화 
+
+        if self.positions[ticker] is not None: 
+            self.positions[ticker] += quantity
+        else: 
+            self.positions[ticker] = quantity    
+        
+        self.add_history('buy',price, quantity)
+
         self.total_num_buy += 1
 
 
@@ -43,7 +56,7 @@ class VirtualAutoTrader:
         quantity = self.positions[ticker]
         self.balance += (quantity * price) * (1 - self.transaction_fee)
         del self.positions[ticker]
-        print(f'Sold {quantity} {ticker} at {price} KRW. Current balance: {self.balance} KRW')
+        self.add_history('sell',price, quantity) 
         self.total_num_sell += 1
 
     def run(self):
@@ -57,14 +70,16 @@ class VirtualAutoTrader:
                     self.buy(self.ticker, price)
                 elif action == 'sell':
                     self.sell(self.ticker, price)
-                time.sleep(1)  # To prevent exceeding the call rate limit
+                time.sleep(0.1)  # To prevent exceeding the call rate limit
 
-                if cycle % 10 == 0 :
+                if cycle % 50 == 0 :
+                    eval = self.get_eval_balance(self.ticker, price)
+                    ratio = (eval - self.start_balance) / (self.start_balance)
                     print(f'[{cycle}]Balance:', self.balance)
                     print(f'[{cycle}]Positions:', self.positions)
-                    print(f'[{cycle}]Total:', self.get_eval_balance(self.ticker, price))                
+                    print(f'[{cycle}]Total:', self.get_eval_balance(self.ticker, price), ratio)                
                 
-                if cycle == 1000:
+                if cycle == 500:
                     eval = self.get_eval_balance(self.ticker, price)
                     ratio = (eval - self.start_balance) / (self.start_balance)
                     print(f'DONE Start {self.start_balance} Final {eval}')
